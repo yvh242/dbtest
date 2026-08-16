@@ -15,6 +15,8 @@ headers = {
 # Vraag direct de data op via de PostgREST endpoint
 api_url = f"{url}/rest/v1/gebruikers?select=*"
 
+st.write("Gebruikte URL:", url)
+
 try:
     response = requests.get(api_url, headers=headers)
     
