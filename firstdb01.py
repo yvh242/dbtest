@@ -23,5 +23,14 @@ if st.button("Opslaan"):
 
 # 3. Data tonen
 st.subheader("Bestaande gebruikers")
-response = supabase.table("gebruikers").select("*").execute()
-st.table(response.data)
+st.title("Debug Scherm")
+try:
+    # Probeer de data op te halen en vang eventuele fouten af
+    response = supabase.table("gebruikers").select("*").execute()
+    st.success("Verbinding gelukt!")
+    st.write(response.data)
+
+except Exception as e:
+    # Dit toont de exacte foutmelding die Supabase terugstuurt
+    st.error(f"Volledige foutmelding: {e}")
+
