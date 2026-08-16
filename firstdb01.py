@@ -1,37 +1,28 @@
 import streamlit as st
-from supabase import create_client
+import requests
 
-# 1. Verbinding maken
-@st.cache_resource
-def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    url = url.rstrip('/')
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+url = st.secrets["SUPABASE_URL"].rstrip('/')
+key = st.secrets["SUPABASE_KEY"]
 
-supabase = init_connection()
+st.title("Test via directe HTTP request")
 
-# 2. Simpele UI voor gebruiker toevoegen
-st.title("Gebruikersregistratie")
+# Maak de headers voor Supabase REST API
+headers = {
+    "apikey": key,
+    "Authorization": f"Bearer {key}"
+}
 
-naam = st.text_input("Naam")
-email = st.text_input("Email")
+# Vraag direct de data op via de PostgREST endpoint
+api_url = f"{url}/rest/v1/gebruikers?select=*"
 
-if st.button("Opslaan"):
-    # Data naar Supabase sturen
-    data = supabase.table("gebruikers").insert({"naam": naam, "email": email}).execute()
-    st.success("Gebruiker opgeslagen!")
-
-# 3. Data tonen
-st.subheader("Bestaande gebruikers")
-st.title("Debug Scherm")
 try:
-    # Probeer de data op te halen en vang eventuele fouten af
-    response = supabase.table("gebruikers").select("*").execute()
-    st.success("Verbinding gelukt!")
-    st.write(response.data)
+    response = requests.get(api_url, headers=headers)
+    
+    if response.status_code == 200:
+        st.success("Verbinding via HTTP werkt wél!")
+        st.json(response.json())
+    else:
+        st.error(f"HTTP Foutcode {response.status_code}: {response.text}")
 
 except Exception as e:
-    # Dit toont de exacte foutmelding die Supabase terugstuurt
-    st.error(f"Volledige foutmelding: {e}")
-
+    st.error(f"Fout: {e}")
