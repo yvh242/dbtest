@@ -5,42 +5,62 @@ import streamlit as st
 url = st.secrets["SUPABASE_URL"].rstrip("/")
 key = st.secrets["SUPABASE_KEY"]
 
-st.title("Supabase Database Viewer")
+st.title("Supabase Beheer Paneel")
 
-# Maak de headers voor Supabase REST API
-headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+headers = {
+    "apikey": key,
+    "Authorization": f"Bearer {key}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation" 
+}
 
-# Laat de gebruiker zelf de tabelnaam invullen (bijv. 'gebruikers')
-table_name = st.text_input(
-    "Naam van de tabel die je wilt bekijken:", value="gebruikers"
-)
+table_name = st.text_input("Tabelnaam:", value="gebruikers")
+api_url = f"{url}/rest/v1/{table_name}"
 
-api_url = f"{url}/rest/v1/{table_name}?select=*"
+# --- FUNCTIES ---
+def fetch_data():
+    response = requests.get(f"{api_url}?select=*", headers=headers)
+    return response.json() if response.status_code == 200 else None
 
-if st.button("Laad Data"):
-  try:
-    response = requests.get(api_url, headers=headers)
+# --- TOEVOEGEN ---
+with st.expander("➕ Nieuw record toevoegen"):
+    with st.form("add_form"):
+        # Let op: Pas de velden aan naar jouw databasekolommen!
+        # Hier gaan we uit van een tabel met 'naam' en 'email'
+        new_name = st.text_input("Naam")
+        new_email = st.text_input("Email")
+        submitted = st.form_submit_button("Toevoegen")
+        
+        if submitted:
+            payload = {"naam": new_name, "email": new_email}
+            response = requests.post(api_url, headers=headers, json=payload)
+            if response.status_code in [200, 201]:
+                st.success("Record toegevoegd!")
+                st.rerun()
+            else:
+                st.error(f"Fout bij toevoegen: {response.text}")
 
-    if response.status_code == 200:
-      data = response.json()
+# --- DATA WEERGEVEN & VERWIJDEREN ---
+data = fetch_data()
 
-      if data:
-        st.success(f"Tabel '{table_name}' succesvol geladen ({len(data)} rijen)!")
-
-        # Converteer de JSON data naar een Pandas DataFrame
-        df = pd.DataFrame(data)
-
-        # Toon een interactieve, sorteerbare tabel
-        st.dataframe(df, use_container_width=True)
-
-        # Optioneel: Toon ook wat statistieken of ruwe data
-        with st.expander("Bekijk als ruwe JSON"):
-          st.json(data)
-      else:
-        st.warning(f"De tabel '{table_name}' is momenteel leeg.")
-
-    else:
-      st.error(f"HTTP Foutcode {response.status_code}: {response.text}")
-
-  except Exception as e:
-    st.error(f"Er is een fout opgetreden: {e}")
+if data:
+    df = pd.DataFrame(data)
+    st.subheader("Huidige data")
+    
+    # We tonen de data in een tabel
+    # Voor verwijderen gebruiken we een kolom met buttons
+    for index, row in df.iterrows():
+        col1, col2 = st.columns([0.8, 0.2])
+        col1.write(f"{row.to_dict()}")
+        
+        # Verwijder actie (gebaseerd op een 'id' kolom in je tabel)
+        if col2.button("🗑️ Verwijder", key=f"del_{row['id']}"):
+            del_url = f"{api_url}?id=eq.{row['id']}"
+            response = requests.delete(del_url, headers=headers)
+            if response.status_code == 204:
+                st.toast("Record verwijderd!")
+                st.rerun()
+            else:
+                st.error(f"Verwijderen mislukt: {response.text}")
+else:
+    st.info("Geen data gevonden of tabel is leeg.")
