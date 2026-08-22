@@ -1,77 +1,59 @@
-import pandas as pd
-import requests
 import streamlit as st
+from supabase import create_client, Client
 
-url = st.secrets["SUPABASE_URL"].rstrip("/")
-key = st.secrets["SUPABASE_KEY"]
+# 1. Verbinding maken met Supabase (haal je gegevens op uit je Supabase dashboard)
+SUPABASE_URL = "JOUW_SUPABASE_URL"
+SUPABASE_KEY = "JOUW_SUPABASE_ANON_KEY"
 
-st.title("🛒 Boodschappenlijstje")
+@st.cache_resource
+def init_connection():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-headers = {
-    "apikey": key,
-    "Authorization": f"Bearer {key}",
-    "Content-Type": "application/json",
-    "Prefer": "return=representation",
-}
+supabase: Client = init_connection()
 
-table_name = "boodschappen"
-api_url = f"{url}/rest/v1/{table_name}"
+# 2. Titel van de app
+st.title("Boodschappen")
 
-
-# --- FUNCTIES ---
-def fetch_data():
-  response = requests.get(f"{api_url}?select=*&order=id.asc", headers=headers)
-  return response.json() if response.status_code == 200 else None
-
-
-# --- TOEVOEGEN ---
-with st.form("add_form", clear_on_submit=True):
-  new_name = st.text_input("Nieuw boodschap item:")
-  submitted = st.form_submit_button("Toevoegen")
-
-  if submitted:
-    if new_name.strip() != "":
-      payload = {"name": new_name, "completed": False}
-      response = requests.post(api_url, headers=headers, json=payload)
-
-      if response.status_code in [200, 201]:
-        st.success(f"'{new_name}' toegevoegd!")
+# 3. Item toevoegen met een '+' teken
+with st.form(key="add_form", clear_on_submit=True):
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        new_item = st.text_input("Nieuw item", placeholder="Typ een boodschap...", label_visibility="collapsed")
+    with col2:
+        submit = st.form_submit_button("+")
+        
+    if submit and new_item.strip():
+        supabase.table("shopping_items").insert({"name": new_item.strip()}).execute()
         st.rerun()
-      else:
-        st.error(f"Fout bij toevoegen: {response.text}")
-    else:
-      st.warning("Vul alstublieft een naam in.")
+
+# 4. Items ophalen uit de database
+response = supabase.table("shopping_items").select("*").order("created_at", create_at_asc=False).execute()
+items = response.data
 
 st.divider()
-st.subheader("Huidige Boodschappen")
 
-# --- DATA WEERGEVEN & BEHEREN VIA CHECKBOX ---
-data = fetch_data()
-
-if data:
-  for row in data:
-    item_id = row["id"]
-    item_name = row["name"]
-    item_completed = row["completed"]
-
-    col1, col2 = st.columns([0.85, 0.15])
-
-    is_checked = col1.checkbox(
-        item_name, value=item_completed, key=f"check_{item_id}"
-    )
-
-    if is_checked != item_completed:
-      if is_checked:  # Vinkje is aangezet -> Verwijderen
-        del_url = f"{api_url}?id=eq.{item_id}"
-        response = requests.delete(del_url, headers=headers)
-
-        # Accepteer zowel 204 (No Content) als 200 (met representation)
-        if response.status_code in [200, 204]:
-          st.toast(f"'{item_name}' is afgevinkt en verwijderd!")
-          st.rerun()
-        else:
-          st.error(f"Verwijderen mislukt: {response.text}")
+# 5. Lijst tonen met afvink- en direct verwijderen-knop
+if not items:
+    st.info("Je lijstje is leeg!")
 else:
-  st.info(
-      "Je boodschappenlijst is momenteel leeg! Voeg hierboven een item toe."
-  )
+    for item in items:
+        col_check, col_del = st.columns([5, 1])
+        
+        with col_check:
+            # Checkbox om af te vinken
+            is_completed = st.checkbox(
+                item["name"], 
+                value=item["is_completed"], 
+                key=f"check_{item['id']}"
+            )
+            
+            # Als de status verandert in Supabase updaten
+            if is_completed != item["is_completed"]:
+                supabase.table("shopping_items").update({"is_completed": is_completed}).eq("id", item["id"]).execute()
+                st.rerun()
+                
+        with col_del:
+            # Direct verwijderen zonder melding (prullenbak icoon)
+            if st.button("🗑️", key=f"del_{item['id']}"):
+                supabase.table("shopping_items").delete().eq("id", item["id"]).execute()
+                st.rerun()
