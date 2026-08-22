@@ -31,7 +31,6 @@ with st.form("add_form", clear_on_submit=True):
 
   if submitted:
     if new_name.strip() != "":
-      # 'completed' wordt standaard op False gezet
       payload = {"name": new_name, "completed": False}
       response = requests.post(api_url, headers=headers, json=payload)
 
@@ -50,7 +49,6 @@ st.subheader("Huidige Boodschappen")
 data = fetch_data()
 
 if data:
-  # Loop door alle rijen uit de database
   for row in data:
     item_id = row["id"]
     item_name = row["name"]
@@ -58,19 +56,17 @@ if data:
 
     col1, col2 = st.columns([0.85, 0.15])
 
-    # Maak een checkbox. Standaardstatus komt uit de database (meestal False)
-    # De unieke 'key' zorgt ervoor dat Streamlit weet bij welk item deze checkbox hoort
     is_checked = col1.checkbox(
         item_name, value=item_completed, key=f"check_{item_id}"
     )
 
-    # Als de gebruiker de checkbox aanvinkt (True), dan verwijderen we het item direct
     if is_checked != item_completed:
-      if is_checked:  # Vinkje is zojuist aangezet
+      if is_checked:  # Vinkje is aangezet -> Verwijderen
         del_url = f"{api_url}?id=eq.{item_id}"
         response = requests.delete(del_url, headers=headers)
 
-        if response.status_code == 204:
+        # Accepteer zowel 204 (No Content) als 200 (met representation)
+        if response.status_code in [200, 204]:
           st.toast(f"'{item_name}' is afgevinkt en verwijderd!")
           st.rerun()
         else:
